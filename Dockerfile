@@ -9,4 +9,5 @@ RUN ./mvnw clean package
 
 EXPOSE 8080
 
-CMD ["java", "-jar", "target/*.jar"]
+# fix CMD
+CMD ["java", "-jar", "target/library-management-system-0.0.1-SNAPSHOT.jar"]
