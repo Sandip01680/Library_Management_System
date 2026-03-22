@@ -1,22 +1,23 @@
 package com.library.service;
 
-import com.library.util.FineCalculator;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 @Service
 public class FineService {
 
-    private final double finePerDay;
-
-    public FineService(@Value("${library.fine.per-day:5.0}") double finePerDay) {
-        this.finePerDay = finePerDay;
-    }
-
     public double calculate(LocalDate dueDate, LocalDate returnDate) {
-        return FineCalculator.calculateFine(dueDate, returnDate, finePerDay);
+
+        long daysLate = ChronoUnit.DAYS.between(dueDate, returnDate);
+
+        // ✅ 14 days er modhhe return hole fine 0
+        if (daysLate <= 0) {
+            return 0;
+        }
+
+        // 🔥 14 din por ₹10 per day
+        return daysLate * 10;
     }
 }
-

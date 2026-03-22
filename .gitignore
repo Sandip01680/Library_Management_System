@@ -1,0 +1,21 @@
+# Ignore build output (Spring Boot)
+backend/target/
+
+# Logs
+*.log
+
+# IDE files
+*.iml
+.idea/
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Maven wrapper (optional)
+backend/.mvn/
+
+# Node/Frontend dependencies (if any)
+frontend/node_modules/
+frontend/dist/

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/transactions")
 public class TransactionController {
@@ -37,20 +38,4 @@ public class TransactionController {
     public List<Transaction> listAll() {
         return transactionService.listAll();
     }
-
-    @GetMapping("/{id}")
-    public Transaction getById(@PathVariable Long id) {
-        return transactionService.getById(id);
-    }
-
-    @GetMapping("/user/{userId}")
-    public List<Transaction> listByUser(@PathVariable Long userId) {
-        return transactionService.listByUser(userId);
-    }
-
-    @GetMapping("/book/{bookId}")
-    public List<Transaction> listByBook(@PathVariable Long bookId) {
-        return transactionService.listByBook(bookId);
-    }
 }
-

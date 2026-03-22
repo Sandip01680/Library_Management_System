@@ -1,233 +1,182 @@
+// @ts-nocheck
 const API_BASE_URL = "http://localhost:8080";
 
-function getStoredUser() {
-  try {
-    const raw = localStorage.getItem("lms_user");
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) {
-    console.error("Failed to parse stored user", e);
-    return null;
-  }
-}
+// ---------- USER STORAGE ----------
+function getStoredUser() { return JSON.parse(localStorage.getItem("lms_user")); }
+function storeUser(user) { localStorage.setItem("lms_user", JSON.stringify(user)); }
+function clearUser() { localStorage.removeItem("lms_user"); }
 
-function storeUser(user) {
-  localStorage.setItem("lms_user", JSON.stringify(user));
-}
-
-function clearUser() {
-  localStorage.removeItem("lms_user");
-}
-
+// ---------- API REQUEST ----------
 async function apiRequest(path, options = {}) {
-  const url = API_BASE_URL + path;
-  const baseHeaders = { "Content-Type": "application/json" };
-  const opts = {
-    method: "GET",
+  const res = await fetch(API_BASE_URL + path, {
+    headers: { "Content-Type": "application/json" },
     ...options,
-    headers: { ...baseHeaders, ...(options.headers || {}) },
-  };
-
-  const res = await fetch(url, opts);
-  const text = await res.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
-  if (!res.ok) {
-    const message =
-      (data && (data.error || data.message)) ||
-      `Request failed with status ${res.status}`;
-    throw new Error(message);
-  }
+  });
+  let data = null;
+  try { data = await res.json(); } catch(e){}
+  if(!res.ok) throw new Error(data?.message || "Request failed");
   return data;
 }
 
-// Auth flows
-
-async function handleLogin(event) {
-  event.preventDefault();
-  const form = event.target;
-  const email = form.email.value.trim();
-  const password = form.password.value;
-  const errorBox = document.getElementById("login-error");
-
-  errorBox.classList.add("hidden");
-  errorBox.textContent = "";
-
-  try {
-    const user = await apiRequest("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-    storeUser(user);
-    window.location.href = "dashboard.html";
-  } catch (err) {
-    errorBox.textContent = err.message || "Login failed";
-    errorBox.classList.remove("hidden");
-  }
-}
-
-async function handleRegister(event) {
-  event.preventDefault();
-  const form = event.target;
-  const name = form.name.value.trim();
-  const email = form.email.value.trim();
-  const password = form.password.value;
-  const role = form.role.value || "MEMBER";
-
-  const errorBox = document.getElementById("register-error");
-  const successBox = document.getElementById("register-success");
-
-  errorBox.classList.add("hidden");
-  errorBox.textContent = "";
-  successBox.classList.add("hidden");
-  successBox.textContent = "";
-
-  try {
-    await apiRequest("/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ name, email, password, role }),
-    });
-    successBox.textContent = "Registration successful. You can now log in.";
-    successBox.classList.remove("hidden");
-    form.reset();
-  } catch (err) {
-    errorBox.textContent = err.message || "Registration failed";
-    errorBox.classList.remove("hidden");
-  }
-}
-
-// Dashboard
-
-async function loadDashboard() {
+// ---------- DASHBOARD ----------
+let allBooks = [];
+async function loadDashboard(){
   const user = getStoredUser();
-  if (!user) {
-    window.location.href = "login.html";
+  if(!user) return window.location.href="login.html";
+
+  document.getElementById("user-name").innerText=user.name;
+  document.getElementById("user-email").innerText=user.email;
+  document.getElementById("user-role").innerText=user.role;
+
+  if(user.role==="ADMIN") document.getElementById("admin-panel").style.display="block";
+  else document.getElementById("admin-panel").style.display="none";
+
+  allBooks = await apiRequest("/api/books");
+  renderBooks(allBooks);
+}
+
+// ---------- RENDER BOOKS ----------
+function renderBooks(books){
+  const user = getStoredUser();
+  const container = document.getElementById("books-container");
+  container.innerHTML="";
+
+  if(books.length===0){
+    container.innerHTML="<p class='muted'>No books found</p>";
     return;
   }
 
-  const userNameEl = document.getElementById("user-name");
-  const userEmailEl = document.getElementById("user-email");
-  const userRoleEl = document.getElementById("user-role");
-  const booksContainer = document.getElementById("books-container");
-  const booksEmptyEl = document.getElementById("books-empty");
-  const dashboardError = document.getElementById("dashboard-error");
+  books.forEach(book=>{
+    const div = document.createElement("div");
+    div.className="book-card";
+    div.innerHTML = `
+      <div class="book-title">${book.title}</div>
+      <div class="book-meta">Author: ${book.author}</div>
+      <div class="book-meta">ISBN: ${book.isbn}</div>
+      <div class="book-meta">Available: ${book.availableCopies}/${book.totalCopies}</div>
+    `;
 
-  userNameEl.textContent = user.name;
-  userEmailEl.textContent = user.email;
-  userRoleEl.textContent = user.role;
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className="book-actions";
 
-  dashboardError.classList.add("hidden");
-  dashboardError.textContent = "";
-  booksContainer.innerHTML = "";
-  booksEmptyEl.classList.add("hidden");
-
-  try {
-    const books = await apiRequest("/api/books");
-    if (!books || books.length === 0) {
-      booksEmptyEl.classList.remove("hidden");
-      return;
+    if(book.availableCopies>0 && (!user.issuedBooks || !user.issuedBooks.includes(book.id))){
+      const btn = document.createElement("button");
+      btn.innerText="Issue";
+      btn.className="btn-issue";
+      btn.onclick = ()=>issueBook(book.id);
+      actionsDiv.appendChild(btn);
+    } else if(user.issuedBooks && user.issuedBooks.includes(book.id)){
+      const span = document.createElement("span");
+      span.className="muted";
+      span.innerText="Already Issued";
+      actionsDiv.appendChild(span);
+    } else {
+      const span = document.createElement("span");
+      span.className="muted";
+      span.innerText="Not Available";
+      actionsDiv.appendChild(span);
     }
 
-    books.forEach((book) => {
-      const card = document.createElement("div");
-      card.className = "book-card";
+    if(user.role==="ADMIN"){
+      const deleteBtn = document.createElement("button");
+      deleteBtn.innerText="Delete";
+      deleteBtn.className="btn-delete";
+      deleteBtn.onclick=()=>deleteBook(book.id);
+      actionsDiv.appendChild(deleteBtn);
+    }
 
-      const title = document.createElement("div");
-      title.className = "book-title";
-      title.textContent = book.title;
-
-      const meta = document.createElement("div");
-      meta.className = "book-meta";
-      meta.textContent = `${book.author} • ISBN: ${book.isbn}`;
-
-      const availability = document.createElement("div");
-      availability.className =
-        (book.availableCopies ?? 0) > 0 ? "tag-available" : "tag-unavailable";
-      availability.textContent =
-        (book.availableCopies ?? 0) > 0
-          ? `Available: ${book.availableCopies}/${book.totalCopies}`
-          : "Not available";
-
-      const actions = document.createElement("div");
-      actions.className = "book-actions";
-
-      const issueBtn = document.createElement("button");
-      issueBtn.className = "btn btn-secondary";
-      issueBtn.textContent = "Issue";
-      issueBtn.disabled = (book.availableCopies ?? 0) <= 0;
-      issueBtn.onclick = () => issueBookForUser(user, book.id);
-
-      const info = document.createElement("span");
-      info.className = "muted";
-      info.textContent = "Return is by transaction ID for now.";
-
-      actions.appendChild(issueBtn);
-      actions.appendChild(info);
-
-      card.appendChild(title);
-      card.appendChild(meta);
-      card.appendChild(availability);
-      card.appendChild(actions);
-
-      booksContainer.appendChild(card);
-    });
-  } catch (err) {
-    dashboardError.textContent = err.message || "Failed to load dashboard.";
-    dashboardError.classList.remove("hidden");
-  }
+    div.appendChild(actionsDiv);
+    container.appendChild(div);
+  });
 }
 
-async function issueBookForUser(user, bookId) {
-  const dashboardError = document.getElementById("dashboard-error");
-  dashboardError.classList.add("hidden");
-  dashboardError.textContent = "";
-
-  try {
-    const tx = await apiRequest("/api/transactions/issue", {
-      method: "POST",
-      body: JSON.stringify({ userId: user.id, bookId }),
-    });
-    alert(
-      `Book issued successfully.\nTransaction ID: ${tx.id}\nDue date: ${tx.dueDate}`
+// ---------- SEARCH ----------
+function searchBooks(){
+  const query = document.getElementById("search-input").value.toLowerCase().trim();
+  if(!query) renderBooks(allBooks);
+  else{
+    const filtered = allBooks.filter(b=>
+      b.title.toLowerCase().includes(query) || 
+      b.author.toLowerCase().includes(query) ||
+      b.isbn.toLowerCase().includes(query)
     );
-    await loadDashboard();
-  } catch (err) {
-    dashboardError.textContent = err.message || "Failed to issue book.";
-    dashboardError.classList.remove("hidden");
+    renderBooks(filtered.length ? filtered : []);
   }
 }
 
-async function returnByTransactionId(event) {
-  event.preventDefault();
-  const input = document.getElementById("return-transaction-id");
-  const txId = input.value.trim();
-  const dashboardError = document.getElementById("dashboard-error");
-
-  if (!txId) return;
-
-  dashboardError.classList.add("hidden");
-  dashboardError.textContent = "";
-
-  try {
-    const tx = await apiRequest(`/api/transactions/return/${encodeURIComponent(txId)}`, {
-      method: "POST",
-    });
-    alert(
-      `Book returned.\nFine: ${tx.fineAmount != null ? tx.fineAmount : 0} currency units.`
-    );
-    input.value = "";
-    await loadDashboard();
-  } catch (err) {
-    dashboardError.textContent = err.message || "Failed to return book.";
-    dashboardError.classList.remove("hidden");
-  }
+// ---------- ADD BOOK ----------
+function showAddBookForm(){ 
+  const user = getStoredUser();
+  if(user.role !== "ADMIN") return;
+  const form = document.getElementById("add-book-form");
+  form.style.display = form.style.display === "block" ? "none" : "block";
 }
 
-function logout() {
-  clearUser();
-  window.location.href = "login.html";
+async function addBook(){
+  const user = getStoredUser();
+  if(user.role !== "ADMIN"){ alert("Members cannot add books!"); return; }
+
+  const title=document.getElementById("book-title").value.trim();
+  const author=document.getElementById("book-author").value.trim();
+  const isbn=document.getElementById("book-isbn").value.trim();
+  const copies=parseInt(document.getElementById("book-copies").value);
+
+  if(!title || !author || !isbn || !copies){ alert("Please fill all fields"); return; }
+
+  await apiRequest("/api/books",{
+    method:"POST",
+    body:JSON.stringify({title,author,isbn,totalCopies:copies,availableCopies:copies})
+  });
+
+  alert("Book added successfully ✅");
+  document.getElementById("book-title").value="";
+  document.getElementById("book-author").value="";
+  document.getElementById("book-isbn").value="";
+  document.getElementById("book-copies").value="";
+  document.getElementById("add-book-form").style.display="none";
+  loadDashboard();
 }
 
+// ---------- DELETE BOOK ----------
+async function deleteBook(id){
+  const user = getStoredUser();
+  if(user.role !== "ADMIN"){ alert("Members cannot delete books!"); return; }
+  if(!confirm("Delete this book?")) return;
+  await apiRequest(`/api/books/${id}`,{method:"DELETE"});
+  alert("Deleted ✅");
+  loadDashboard();
+}
+
+// ---------- ISSUE / RETURN ----------
+async function issueBook(bookId){
+  const user = getStoredUser();
+  const tx = await apiRequest("/api/transactions/issue",{method:"POST",body:JSON.stringify({userId:user.id,bookId})});
+  alert("Issued. Transaction ID: "+tx.id);
+
+  user.issuedBooks = user.issuedBooks || [];
+  if(!user.issuedBooks.includes(bookId)) user.issuedBooks.push(bookId);
+  storeUser(user);
+  loadDashboard();
+}
+
+async function returnBook(){
+  const id = document.getElementById("return-transaction-id").value.trim();
+  if(!id){ alert("Enter Transaction ID!"); return; }
+
+  try{
+    const tx = await apiRequest(`/api/transactions/return/${id}`,{method:"POST"});
+    alert("Returned. Fine: "+tx.fineAmount);
+
+    const user = getStoredUser();
+    if(user.issuedBooks && user.issuedBooks.includes(tx.bookId)){
+      user.issuedBooks = user.issuedBooks.filter(bid=>bid!==tx.bookId);
+      storeUser(user);
+    }
+  } catch(e){ alert("Invalid Transaction ID ❌"); }
+
+  document.getElementById("return-transaction-id").value="";
+  loadDashboard();
+}
+
+// ---------- LOGOUT ----------
+function logout(){ clearUser(); window.location.href="login.html"; }

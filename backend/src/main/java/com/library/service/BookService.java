@@ -36,32 +36,6 @@ public class BookService {
         return bookRepository.findAll();
     }
 
-    public Book getById(Long id) {
-        return bookRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
-    }
-
-    @Transactional
-    public Book update(Long id, Book patch) {
-        Book existing = getById(id);
-
-        if (patch.getTitle() != null) existing.setTitle(patch.getTitle());
-        if (patch.getAuthor() != null) existing.setAuthor(patch.getAuthor());
-
-        if (patch.getIsbn() != null && !patch.getIsbn().equals(existing.getIsbn())) {
-            if (!patch.getIsbn().isBlank() && bookRepository.existsByIsbn(patch.getIsbn())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "ISBN already exists");
-            }
-            existing.setIsbn(patch.getIsbn());
-        }
-
-        if (patch.getTotalCopies() != null) existing.setTotalCopies(patch.getTotalCopies());
-        if (patch.getAvailableCopies() != null) existing.setAvailableCopies(patch.getAvailableCopies());
-        validateCopies(existing.getTotalCopies(), existing.getAvailableCopies());
-
-        return bookRepository.save(existing);
-    }
-
     @Transactional
     public void delete(Long id) {
         if (!bookRepository.existsById(id)) {
@@ -77,4 +51,3 @@ public class BookService {
         }
     }
 }
-

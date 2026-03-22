@@ -36,20 +36,22 @@ public class TransactionService {
         this.fineService = fineService;
     }
 
+    // 🔹 ISSUE BOOK
     @Transactional
     public Transaction issueBook(Long userId, Long bookId) {
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found"));
 
-        Integer available = book.getAvailableCopies();
-        if (available == null || available <= 0) {
+        if (book.getAvailableCopies() == null || book.getAvailableCopies() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Book is not available");
         }
 
         if (transactionRepository.existsActiveIssue(userId, bookId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This user already has this book issued");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User already has this book");
         }
 
         LocalDate issueDate = LocalDate.now();
@@ -63,36 +65,40 @@ public class TransactionService {
         tx.setReturnDate(null);
         tx.setFineAmount(0.0);
 
-        book.setAvailableCopies(available - 1);
+        book.setAvailableCopies(book.getAvailableCopies() - 1);
         bookRepository.save(book);
+
         return transactionRepository.save(tx);
     }
 
+    // 🔹 RETURN BOOK (FINAL CORRECT LOGIC)
     @Transactional
     public Transaction returnBook(Long transactionId) {
+
         Transaction tx = transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
 
         if (tx.getReturnDate() != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Book already returned for this transaction");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Book already returned");
         }
 
         Book book = tx.getBook();
         if (book == null) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Transaction is missing book reference");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Book missing in transaction");
         }
 
         LocalDate returnDate = LocalDate.now();
         tx.setReturnDate(returnDate);
+
+        // ✅ REAL FINE LOGIC (14 days free, then ₹10/day)
         double fine = fineService.calculate(tx.getDueDate(), returnDate);
         tx.setFineAmount(fine);
 
-        Integer available = book.getAvailableCopies();
-        Integer total = book.getTotalCopies();
-        int nextAvailable = (available == null ? 0 : available) + 1;
-        if (total != null && nextAvailable > total) {
-            nextAvailable = total;
-        }
+        int available = (book.getAvailableCopies() == null) ? 0 : book.getAvailableCopies();
+        int total = (book.getTotalCopies() == null) ? Integer.MAX_VALUE : book.getTotalCopies();
+
+        int nextAvailable = Math.min(available + 1, total);
+
         book.setAvailableCopies(nextAvailable);
         bookRepository.save(book);
 
@@ -116,4 +122,3 @@ public class TransactionService {
         return transactionRepository.findByBookId(bookId);
     }
 }
-

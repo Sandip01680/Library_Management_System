@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/books")
 public class BookController {
@@ -22,21 +23,11 @@ public class BookController {
         this.bookService = bookService;
     }
 
-    public record BookRequest(
-            @NotBlank String title,
-            @NotBlank String author,
-            @NotBlank String isbn,
-            @NotNull @PositiveOrZero Integer totalCopies,
-            @PositiveOrZero Integer availableCopies
-    ) {}
-
-    public record BookPatchRequest(
-            String title,
-            String author,
-            String isbn,
-            @PositiveOrZero Integer totalCopies,
-            @PositiveOrZero Integer availableCopies
-    ) {}
+    public record BookRequest(@NotBlank String title,
+                              @NotBlank String author,
+                              @NotBlank String isbn,
+                              @NotNull @PositiveOrZero Integer totalCopies,
+                              @PositiveOrZero Integer availableCopies) {}
 
     @PostMapping
     public ResponseEntity<Book> create(@Valid @RequestBody BookRequest body) {
@@ -46,8 +37,8 @@ public class BookController {
         book.setIsbn(body.isbn());
         book.setTotalCopies(body.totalCopies());
         book.setAvailableCopies(body.availableCopies());
-        Book created = bookService.create(book);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(bookService.create(book));
     }
 
     @GetMapping
@@ -55,26 +46,9 @@ public class BookController {
         return bookService.list();
     }
 
-    @GetMapping("/{id}")
-    public Book getById(@PathVariable Long id) {
-        return bookService.getById(id);
-    }
-
-    @PutMapping("/{id}")
-    public Book update(@PathVariable Long id, @Valid @RequestBody BookPatchRequest body) {
-        Book patch = new Book();
-        patch.setTitle(body.title());
-        patch.setAuthor(body.author());
-        patch.setIsbn(body.isbn());
-        patch.setTotalCopies(body.totalCopies());
-        patch.setAvailableCopies(body.availableCopies());
-        return bookService.update(id, patch);
-    }
-
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
+    public ResponseEntity<String> delete(@PathVariable Long id) {
         bookService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok("Book deleted successfully");
     }
 }
-
